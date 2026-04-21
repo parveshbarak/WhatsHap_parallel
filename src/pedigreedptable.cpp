@@ -2,24 +2,28 @@
 #include <cassert>
 #include <limits>
 #include <fstream>
+#include <iostream>
 #include <array>
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <string>
 
 #include "pedigreecolumncostcomputer.h"
 #include "pedigreedptable.h"
+#include "read.h"
 
 using namespace std;
 
-PedigreeDPTable::PedigreeDPTable(ReadSet* read_set, const vector<unsigned int>& recombcost, const Pedigree* pedigree, bool distrust_genotypes, const vector<unsigned int>* positions) :
+PedigreeDPTable::PedigreeDPTable(ReadSet* read_set, const vector<unsigned int>& recombcost, const Pedigree* pedigree, bool distrust_genotypes, const vector<unsigned int>* positions, const string& mec_matrix_file) :
 	read_set(read_set),
 	recombcost(recombcost),
 	pedigree(pedigree),
 	distrust_genotypes(distrust_genotypes),
 	optimal_score(0u),
 	optimal_score_index(0u),
-	input_column_iterator(*read_set, positions)
+	input_column_iterator(*read_set, positions),
+	mec_matrix_file(mec_matrix_file)
 {
 	read_set->reassignReadIds();
 
@@ -81,8 +85,59 @@ void PedigreeDPTable::clear_table() {
 }
 
 
+static void print_mec_matrix(const ReadSet* read_set, const string& filename) {
+	// Collect all unique variant positions across all reads
+	vector<int> all_positions;
+	for (size_t i = 0; i < read_set->size(); ++i) {
+		const Read* r = read_set->get(i);
+		for (int j = 0; j < r->getVariantCount(); ++j) {
+			all_positions.push_back(r->getPosition(j));
+		}
+	}
+	sort(all_positions.begin(), all_positions.end());
+	all_positions.erase(unique(all_positions.begin(), all_positions.end()), all_positions.end());
+
+	size_t num_reads = read_set->size();
+	size_t num_positions = all_positions.size();
+
+	ofstream out(filename);
+	if (!out.is_open()) {
+		return;
+	}
+
+	// Line 1: num_reads num_positions
+	out << num_reads << " " << num_positions << "\n";
+
+	// Line 2: space-separated genomic positions
+	for (size_t i = 0; i < num_positions; ++i) {
+		if (i > 0) out << " ";
+		out << all_positions[i];
+	}
+	out << "\n";
+
+	// One line per read: read_name  snp_col allele quality  snp_col allele quality ...
+	// snp_col is the 0-based index into all_positions (the SNP column index)
+	for (size_t i = 0; i < num_reads; ++i) {
+		const Read* r = read_set->get(i);
+		out << r->getName();
+		for (int j = 0; j < r->getVariantCount(); ++j) {
+			int pos = r->getPosition(j);
+			// binary search for position index
+			int col = (int)(lower_bound(all_positions.begin(), all_positions.end(), pos) - all_positions.begin());
+			out << " " << col << " " << r->getAllele(j) << " " << r->getVariantQuality(j);
+		}
+		out << "\n";
+	}
+}
+
+
 void PedigreeDPTable::compute_table() {
 	clear_table();
+
+	// Write MEC matrix to file if a filename was provided
+	if (!mec_matrix_file.empty()) {
+		print_mec_matrix(read_set, mec_matrix_file);
+	}
 
 	// empty read-set, nothing to phase, so MEC score is 0
 	if (input_column_iterator.get_column_count() == 0) {
@@ -171,6 +226,30 @@ void PedigreeDPTable::compute_table() {
 			}
 		}
 	}
+
+	// Print MEC cost and first 60 haplotype positions for external verification.
+	std::cerr << "WhatsHap MEC cost: " << optimal_score << "\n";
+
+	input_column_iterator.jump_to_column(0);
+	const vector<unsigned int>* positions = input_column_iterator.get_positions();
+	size_t preview = std::min((size_t)60, index_path.size());
+
+	string h0_str, h1_str;
+	for (size_t col = 0; col < preview; ++col) {
+		const index_and_inheritance_t& v = index_path[col];
+		unique_ptr<vector<const Entry*>> column = input_column_iterator.get_next();
+		PedigreeColumnCostComputer cc(*column, col, read_sources, pedigree,
+		                              *pedigree_partitions[v.inheritance_value], distrust_genotypes);
+		cc.set_partitioning(v.index);
+		auto alleles = cc.get_alleles();
+		// alleles[0] = single sample (index 0 in pedigree)
+		auto a0 = alleles[0].allele0;
+		auto a1 = alleles[0].allele1;
+		h0_str += (a0 == Entry::REF_ALLELE ? '0' : a0 == Entry::ALT_ALLELE ? '1' : '?');
+		h1_str += (a1 == Entry::REF_ALLELE ? '0' : a1 == Entry::ALT_ALLELE ? '1' : '?');
+	}
+	std::cerr << "WhatsHap H0 (first " << preview << " pos): " << h0_str << "\n";
+	std::cerr << "WhatsHap H1 (first " << preview << " pos): " << h1_str << "\n";
 }
 
 

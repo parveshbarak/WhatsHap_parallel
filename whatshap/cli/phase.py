@@ -321,6 +321,7 @@ def run_whatshap(
     use_supplementary: bool = False,
     supplementary_distance_threshold: int = 100_000,
     algorithm: str = "whatshap",
+    mec_matrix_file: str = "",
 ) -> None:
     """
     Run WhatsHap.
@@ -607,6 +608,7 @@ def run_whatshap(
                             pedigree,
                             distrust_genotypes,
                             accessible_positions,
+                            mec_matrix_file,
                         )
                     superreads_list, transmission_vector = dp_table.get_super_reads()
                     logger.debug("%s cost: %d", problem_name, dp_table.get_optimal_cost())
@@ -1050,6 +1052,8 @@ def add_arguments(parser):
         "HP tag (used by GATK ReadBackedPhasing) (default: %(default)s)")
     arg("--output-read-list", metavar="FILE", default=None, dest="read_list_filename",
         help="Write reads that have been used for phasing to FILE.")
+    arg("--mec-matrix", metavar="FILE", default="", dest="mec_matrix_file",
+        help="Write the internal MEC matrix to FILE (one file per phase block; each block overwrites the previous).")
     arg("--algorithm", choices=("whatshap", "hapchat", "heuristic"), default="whatshap",
         help="Phasing algorithm to use (default: %(default)s)")
 

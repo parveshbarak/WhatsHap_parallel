@@ -362,7 +362,7 @@ cdef class ReadSet:
 
 
 cdef class PedigreeDPTable:
-	def __cinit__(self, ReadSet readset, recombcost, Pedigree pedigree, bool distrust_genotypes = False, positions = None):
+	def __cinit__(self, ReadSet readset, recombcost, Pedigree pedigree, bool distrust_genotypes = False, positions = None, mec_matrix_file = ""):
 		"""Build the DP table from the given read set which is assumed to be sorted;
 		that is, the variants in each read must be sorted by position and the reads
 		in the read set must also be sorted (by position of their left-most variant).
@@ -372,7 +372,8 @@ cdef class PedigreeDPTable:
 			c_positions = new vector[unsigned int]()
 			for pos in positions:
 				c_positions.push_back(pos)
-		self.thisptr = new cpp.PedigreeDPTable(readset.thisptr, recombcost, pedigree.thisptr, distrust_genotypes, c_positions)
+		cdef string c_mec_matrix_file = mec_matrix_file.encode() if isinstance(mec_matrix_file, str) else mec_matrix_file
+		self.thisptr = new cpp.PedigreeDPTable(readset.thisptr, recombcost, pedigree.thisptr, distrust_genotypes, c_positions, c_mec_matrix_file)
 		self.pedigree = pedigree
 
 	def __dealloc__(self):

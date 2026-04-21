@@ -2,6 +2,7 @@
 #define PEDIGREE_DP_TABLE_H
 
 #include <array>
+#include <string>
 #include <vector>
 #include <memory>
 
@@ -50,6 +51,8 @@ private:
 	ColumnIterator input_column_iterator;
 	// optimal path obtained from backtrace
 	std::vector<index_and_inheritance_t> index_path;
+	// filename for MEC matrix output (empty = no output)
+	std::string mec_matrix_file;
 
 	// helper function to pull read ids out of read column
 	std::unique_ptr<std::vector<unsigned int> > extract_read_ids(const std::vector<const Entry *>& entries);
@@ -84,7 +87,7 @@ public:
 	 *  @param positions Positions to work on. If 0, then all positions given in read_set will be used. Caller retains
 	 *                   ownership.
 	 */
-	PedigreeDPTable(ReadSet* read_set, const std::vector<unsigned int>& recombcost, const Pedigree* pedigree, bool distrust_genotypes, const std::vector<unsigned int>* positions = nullptr);
+	PedigreeDPTable(ReadSet* read_set, const std::vector<unsigned int>& recombcost, const Pedigree* pedigree, bool distrust_genotypes, const std::vector<unsigned int>* positions = nullptr, const std::string& mec_matrix_file = "");
  
 	~PedigreeDPTable();
 
